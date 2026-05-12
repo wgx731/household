@@ -1,0 +1,26 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>HouseHold Tests</title>
+  <style>
+    body { font-family: monospace; background: #111; color: #fff; padding: 1em; }
+    div { padding: 2px 0; }
+  </style>
+</head>
+<body>
+  <h1>HouseHold Tests</h1>
+  <div id="results">Running...</div>
+  <script type="module">
+    import { report } from './tests/assert.js';
+    await import('./tests/test-map.js');
+    await import('./tests/test-waves.js');
+    await import('./tests/test-economy.js');
+    await import('./tests/test-enemies.js');
+    await import('./tests/test-towers.js');
+    await import('./tests/test-disasters.js');
+    await import('./tests/test-game.js');
+    report();
+  </script>
+</body>
+</html>
