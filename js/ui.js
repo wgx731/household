@@ -10,13 +10,13 @@ export function createUi(game) {
   root.style.borderRadius = '6px';
   root.innerHTML = `
     <div>HouseHold</div>
-    <div>HP: <span id="hp"></span></div>
+    <div>House HP: <span id="hp"></span></div>
+    <div>Player HP: <span id="phP"></span> <span id="shelter" style="color:#7df">shelter</span></div>
     <div>Coins: <span id="coins"></span></div>
     <div>Wave: <span id="wave"></span> / 10</div>
     <div>State: <span id="state"></span></div>
-    <div>Tower: <span id="sel"></span></div>
     <div style="margin-top:6px"><button id="startBtn">Start Wave</button></div>
-    <div style="margin-top:6px;font-size:12px;opacity:.8">Keys: 1 cannon | 2 turret | 3 trap. Click to place.</div>
+    <div style="margin-top:6px;font-size:12px;opacity:.8">Move: WASD / arrows. Space jumps. 1 / 2 / 3 drop cannon / turret / trap.</div>
   `;
   const $ = id => document.getElementById(id);
   $('startBtn').addEventListener('click', () => game.startNextWave());
@@ -33,18 +33,22 @@ export function createUi(game) {
   document.body.appendChild(endLayer);
   endLayer.querySelector('#restartBtn').addEventListener('click', () => location.reload());
 
-  function refresh(selected) {
+  function refresh() {
     $('hp').textContent = Math.max(0, Math.floor(game.houseHp));
+    $('phP').textContent = Math.max(0, Math.floor(game.player.hp));
+    $('shelter').style.visibility = game.player.sheltered ? 'visible' : 'hidden';
     $('coins').textContent = game.economy.coins;
     $('wave').textContent = game.wave;
     $('state').textContent = game.state + (game.activeDisaster ? ` (${game.activeDisaster})` : '');
-    $('sel').textContent = selected;
     $('startBtn').disabled = !(game.state === 'idle' || game.state === 'break');
 
     if (!endShown && (game.state === 'won' || game.state === 'lost')) {
       endShown = true;
       endLayer.style.display = 'grid';
-      endLayer.querySelector('#endMsg').textContent = game.state === 'won' ? 'You won!' : 'House destroyed';
+      const msg = game.state === 'won'
+        ? 'You won!'
+        : game.lostBy === 'player' ? 'Player defeated' : 'House destroyed';
+      endLayer.querySelector('#endMsg').textContent = msg;
     }
   }
   return { refresh };

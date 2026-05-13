@@ -1,4 +1,9 @@
-import { HOUSE_MAX_HP, START_COINS, MAX_WAVES, TOWERS, WAVE_BREAK_MS, DISASTER_DURATION_MS, ENEMIES } from './config.js';
+import {
+  HOUSE_MAX_HP, START_COINS, MAX_WAVES, TOWERS, WAVE_BREAK_MS, DISASTER_DURATION_MS, VOLCANO_DURATION_MS, ENEMIES,
+  PLAYER_HP, PLAYER_SPEED, PLAYER_START, PLAYER_HIT_DAMAGE, PLAYER_HIT_COOLDOWN_MS, PLAYER_HIT_RADIUS,
+  PLAYER_JUMP_VELOCITY, PLAYER_GRAVITY,
+  GRID_SIZE,
+} from './config.js';
 import { tileType, SPAWN_POINTS, pathFromSpawn } from './map.js';
 import { generateWave } from './waves.js';
 import { createEconomy } from './economy.js';
@@ -22,6 +27,8 @@ export function createGame() {
     spawnTimer: 0,
     bossDefeated: false,
     recentShots: [],
+    player: { pos: { ...PLAYER_START }, hp: PLAYER_HP, hitCooldown: 0, y: 0, vy: 0 },
+    lostBy: null,
 
     placeTower(type, { x, z }) {
       const cfg = TOWERS[type];
@@ -34,6 +41,22 @@ export function createGame() {
       if (!this.economy.spend(cfg.cost)) return false;
       this.towers.push(createTower(type, { x, z }));
       return true;
+    },
+
+    placeTowerAtPlayer(type) {
+      const x = Math.round(this.player.pos.x);
+      const z = Math.round(this.player.pos.z);
+      return this.placeTower(type, { x, z });
+    },
+
+    movePlayer(dx, dz, dtMs) {
+      const dt = dtMs / 1000;
+      this.player.pos.x = Math.max(0, Math.min(GRID_SIZE - 1, this.player.pos.x + dx * PLAYER_SPEED * dt));
+      this.player.pos.z = Math.max(0, Math.min(GRID_SIZE - 1, this.player.pos.z + dz * PLAYER_SPEED * dt));
+    },
+
+    playerJump() {
+      if (this.player.y <= 0.001) this.player.vy = PLAYER_JUMP_VELOCITY;
     },
 
     startNextWave() {
@@ -59,7 +82,28 @@ export function createGame() {
 
     tick(dtMs) {
       if (this.state === 'won' || this.state === 'lost') return;
-      if (this.houseHp <= 0) { this.state = 'lost'; return; }
+      if (this.houseHp <= 0) { this.state = 'lost'; this.lostBy = 'house'; return; }
+      if (this.player.hp <= 0) { this.state = 'lost'; this.lostBy = 'player'; return; }
+
+      const dts = dtMs / 1000;
+      this.player.vy -= PLAYER_GRAVITY * dts;
+      this.player.y += this.player.vy * dts;
+      if (this.player.y <= 0) { this.player.y = 0; this.player.vy = 0; }
+      this.player.airborne = this.player.y > 0.01;
+
+      this.player.sheltered = tileType(Math.round(this.player.pos.x), Math.round(this.player.pos.z)) === 'house';
+      this.player.hitCooldown = Math.max(0, this.player.hitCooldown - dtMs);
+      if (this.player.hitCooldown === 0 && !this.player.sheltered && !this.player.airborne) {
+        for (const e of this.activeEnemies) {
+          const dx = e.pos.x - this.player.pos.x;
+          const dz = e.pos.z - this.player.pos.z;
+          if (dx * dx + dz * dz <= PLAYER_HIT_RADIUS * PLAYER_HIT_RADIUS) {
+            this.player.hp -= PLAYER_HIT_DAMAGE;
+            this.player.hitCooldown = PLAYER_HIT_COOLDOWN_MS;
+            break;
+          }
+        }
+      }
 
       if (this.state === 'wave') {
         this.spawnTimer -= dtMs;
@@ -103,9 +147,9 @@ export function createGame() {
         }
       } else if (this.state === 'break') {
         this.breakTimer -= dtMs;
-        if (this.activeDisaster) this._tickDisaster(dtMs);
         if (this.breakTimer <= 0) this.startNextWave();
       }
+      if (this.activeDisaster) this._tickDisaster(dtMs);
       for (const s of this.recentShots) s.ttl -= dtMs;
       this.recentShots = this.recentShots.filter(s => s.ttl > 0);
     },
@@ -116,12 +160,12 @@ export function createGame() {
       this.disasterTimer = DISASTER_DURATION_MS;
       if (kind === 'earthquake') {
         applyEarthquake(this.towers);
-        this.activeDisaster = null;
-        this.disasterTimer = 0;
+        this.disasterTimer = 2000;
       } else if (kind === 'flood') {
         applyFlood(this.towers.filter(t => t.type === 'trap'));
       } else if (kind === 'volcano') {
         applyVolcano({ blockedDirs: this.blockedDirs });
+        this.disasterTimer = VOLCANO_DURATION_MS;
       }
     },
 

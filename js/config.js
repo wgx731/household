@@ -21,4 +21,14 @@ export const WAVE_BREAK_MS = 8000;
 export const MAX_WAVES = 10;
 
 export const DISASTER_DURATION_MS = 30_000;
+export const VOLCANO_DURATION_MS = 10_000;
 export const EARTHQUAKE_DESTROYS = 2;
+
+export const PLAYER_HP = 70;
+export const PLAYER_SPEED = 3;
+export const PLAYER_START = { x: 5, z: 3 };
+export const PLAYER_HIT_DAMAGE = 5;
+export const PLAYER_HIT_COOLDOWN_MS = 800;
+export const PLAYER_HIT_RADIUS = 0.5;
+export const PLAYER_JUMP_VELOCITY = 5;
+export const PLAYER_GRAVITY = 14;
