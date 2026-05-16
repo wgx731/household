@@ -42,29 +42,32 @@ export function createUi(game) {
     -webkit-overflow-scrolling: touch;
   `;
   introLayer.innerHTML = `
-    <div style="max-width: 520px; padding: 18px; line-height: 1.4; font-size: 14px">
+    <div style="max-width: 540px; padding: 18px; line-height: 1.4; font-size: 14px">
       <h1 style="margin: 0 0 4px; color: #ffd54f">HouseHold</h1>
-      <div style="opacity:.85;margin-bottom:10px">Defend the house through 10 waves. Beat the alien mothership to win.</div>
+      <div style="opacity:.85;margin-bottom:10px">Defend the house across 10 waves on a 15&times;15 map with 4 spawn paths. Beat the alien <b>mothership</b> on wave 10. Lose if the <b>house HP</b> (100) or <b>player HP</b> (70) hits 0.</div>
 
       <div style="margin:10px 0;padding:8px 0;border-top:1px solid #333;border-bottom:1px solid #333">
-        <div style="margin-bottom:6px;color:#7df">Difficulty</div>
+        <div style="margin-bottom:6px;color:#7df">Difficulty (scales enemy HP &amp; speed)</div>
         <div id="diffRow" style="display:flex;gap:8px"></div>
       </div>
 
-      <div style="color:#7df;margin:8px 0 2px">Move &amp; place</div>
-      <div>WASD / arrows or tap map to walk. Space jumps and dodges hits. 1-3 drop cannon / turret / trap; 4 buys gun (50c, auto-fires, lasts 3 waves); 5 throws bomb (25c). Walk into the house for shelter.</div>
+      <div style="color:#7df;margin:8px 0 2px">Move &amp; act</div>
+      <div>WASD / arrows or tap the map to walk; the player faces where it walks. <b>Space</b> jumps &mdash; while airborne you dodge enemies, bombers, archer arrows, and lava. <b>1 / 2 / 3</b> drop cannon / turret / trap at your tile. <b>4</b> buys the gun (50c). <b>5</b> throws a bomb (25c). Step into the house for shelter.</div>
 
-      <div style="color:#7df;margin:8px 0 2px">Towers</div>
-      <div><b style="color:#aaa">Cannon</b> 20c, hits ground &middot; <b style="color:#6af">Turret</b> 25c, hits air &middot; <b style="color:#f73">Trap</b> 10c on path, one big hit</div>
+      <div style="color:#7df;margin:8px 0 2px">Towers (kill enemies, earn coins)</div>
+      <div><b style="color:#aaa">Cannon</b> 20c, range 3, hits ground &middot; <b style="color:#6af">Turret</b> 25c, range 4, hits air &middot; <b style="color:#f73">Trap</b> 10c on path tiles, one 25-dmg hit then gone</div>
 
-      <div style="color:#7df;margin:8px 0 2px">Enemies</div>
-      <div><b>Zombie</b> ground &rarr; cannon/trap. <b>Alien</b> air &rarr; turret. <b>Mothership</b> boss air &rarr; turret. <b>Bomber</b> explodes near anything. <b>Archer</b> shoots you from afar.</div>
+      <div style="color:#7df;margin:8px 0 2px">Player weapons</div>
+      <div><b style="color:#ddd">Gun</b> auto-fires the nearest enemy (8 dmg, range 3) and disappears after 3 waves. <b style="color:#c22">Bomb</b> drops at your feet with a 1s fuse, then a 60-dmg blast in 1.5 tiles. The <b style="color:#c22">red smoke</b> is from your bomb; <b style="color:#888">gray smoke</b> is from a Bomber detonation.</div>
 
-      <div style="color:#7df;margin:8px 0 2px">Disasters (3s warning)</div>
-      <div><b>Earthquake</b> shakes screen, breaks 2 towers. <b>Flood</b> -10 HP then drains outside; hide in house. <b>Volcano</b> pours lava on a path (-30 HP), traps on it die; jump over.</div>
+      <div style="color:#7df;margin:8px 0 2px">Enemies (which weapon kills each)</div>
+      <div><b>Zombie</b> slow ground &rarr; <b style="color:#aaa">cannon</b>/<b style="color:#f73">trap</b>. <b>Alien</b> fast flier &rarr; <b style="color:#6af">turret</b>. <b>Mothership</b> wave-10 boss flier &rarr; <b style="color:#6af">turret</b>. <b style="color:#7a3">Bomber</b> proximity blast (30 dmg in 1 tile) hurts <i>everything</i> nearby including its own kind. <b>Archer</b> shoots arrows (8 dmg, range 4) at you.</div>
+
+      <div style="color:#7df;margin:8px 0 2px">Disasters (3s alarm warning before they hit)</div>
+      <div><b>Earthquake</b> screen shakes, up to 2 of your towers break. <b>Flood</b> &mdash;10 HP on start unless sheltered, then &minus;5/0.8s drain outside; traps disabled 30s; <b style="color:#ffd54f">house is the only safe place</b>. <b>Volcano</b> blocks one spawn path for 10s and pours <b style="color:#f73">lava</b>; touching it costs &minus;30 HP, traps on lava are destroyed; jump over to be safe.</div>
 
       <div style="color:#7df;margin:8px 0 2px">Sound</div>
-      <div>Music shifts with the action. Each weapon and disaster has its own SFX. 🔊 top-right mutes.</div>
+      <div>Music swaps between calm / battle / boss / victory / defeat. Each weapon and disaster has its own SFX; an alarm beeps at the start of every disaster. <b>🔊</b> top-right mutes everything.</div>
 
       <div style="margin-top:14px;text-align:center">
         <button id="introStartBtn" style="font-size:18px;padding:10px 26px;cursor:pointer;border-radius:8px;border:none;background:#ffd54f;color:#111;font-weight:700">Start playing</button>

@@ -1,6 +1,6 @@
-export const GRID_SIZE = 11;
+export const GRID_SIZE = 15;
 export const TILE_SIZE = 1;
-export const HOUSE_CENTER = { x: 5, z: 5 };
+export const HOUSE_CENTER = { x: 7, z: 7 };
 export const HOUSE_MAX_HP = 100;
 
 export const START_COINS = 50;
@@ -29,7 +29,7 @@ export const DISASTER_WARNING_MS = 3000;
 
 export const PLAYER_HP = 70;
 export const PLAYER_SPEED = 3;
-export const PLAYER_START = { x: 5, z: 3 };
+export const PLAYER_START = { x: 7, z: 3 };
 export const PLAYER_HIT_DAMAGE = 5;
 export const PLAYER_HIT_COOLDOWN_MS = 800;
 export const PLAYER_HIT_RADIUS = 0.5;

@@ -1,5 +1,5 @@
 import {
-  HOUSE_MAX_HP, START_COINS, MAX_WAVES, TOWERS, WAVE_BREAK_MS, DISASTER_DURATION_MS, VOLCANO_DURATION_MS, DISASTER_WARNING_MS, ENEMIES, DIFFICULTIES,
+  HOUSE_MAX_HP, START_COINS, MAX_WAVES, TOWERS, WAVE_BREAK_MS, DISASTER_DURATION_MS, VOLCANO_DURATION_MS, DISASTER_WARNING_MS, ENEMIES, DIFFICULTIES, HOUSE_CENTER,
   PLAYER_HP, PLAYER_SPEED, PLAYER_START, PLAYER_HIT_DAMAGE, PLAYER_HIT_COOLDOWN_MS, PLAYER_HIT_RADIUS,
   PLAYER_JUMP_VELOCITY, PLAYER_GRAVITY,
   GUN_COST, GUN_RANGE, GUN_DAMAGE, GUN_COOLDOWN_MS,
@@ -203,7 +203,7 @@ export function createGame() {
             }
           }
           if (!trig) {
-            const dxh = 5 - e.pos.x, dzh = 5 - e.pos.z;
+            const dxh = HOUSE_CENTER.x - e.pos.x, dzh = HOUSE_CENTER.z - e.pos.z;
             if (dxh * dxh + dzh * dzh <= 2 * 2) trig = true;
           }
           if (trig) {
@@ -220,7 +220,7 @@ export function createGame() {
               const dx = t.pos.x - e.pos.x, dz = t.pos.z - e.pos.z;
               if (dx * dx + dz * dz <= R2) t.destroyed = true;
             }
-            const dxh2 = 5 - e.pos.x, dzh2 = 5 - e.pos.z;
+            const dxh2 = HOUSE_CENTER.x - e.pos.x, dzh2 = HOUSE_CENTER.z - e.pos.z;
             if (dxh2 * dxh2 + dzh2 * dzh2 <= 2 * 2) this.houseHp -= cfg.explodeDamage;
             this.explosions.push({ pos: { x: e.pos.x, z: e.pos.z }, ttl: EXPLOSION_TTL_MS, source: 'bomber' });
             e.dead = true;

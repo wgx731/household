@@ -30,28 +30,32 @@ export function pathTiles() {
   return out;
 }
 
+const LAST = GRID_SIZE - 1;
+const NEAR_LOW = HOUSE_CENTER.x - 2;
+const NEAR_HIGH = HOUSE_CENTER.x + 2;
+
 export const SPAWN_POINTS = [
-  { x: 5, z: 0, dir: 'south' },
-  { x: 5, z: 10, dir: 'north' },
-  { x: 0, z: 5, dir: 'east' },
-  { x: 10, z: 5, dir: 'west' },
+  { x: HOUSE_CENTER.x, z: 0,    dir: 'south' },
+  { x: HOUSE_CENTER.x, z: LAST, dir: 'north' },
+  { x: 0,    z: HOUSE_CENTER.z, dir: 'east'  },
+  { x: LAST, z: HOUSE_CENTER.z, dir: 'west'  },
 ];
 
 export function pathFromSpawn(spawn) {
   const points = [];
-  if (spawn.dir === 'south') for (let z = 0; z <= 3; z++) points.push({ x: 5, z });
-  if (spawn.dir === 'north') for (let z = 10; z >= 7; z--) points.push({ x: 5, z });
-  if (spawn.dir === 'east')  for (let x = 0; x <= 3; x++) points.push({ x, z: 5 });
-  if (spawn.dir === 'west')  for (let x = 10; x >= 7; x--) points.push({ x, z: 5 });
+  if (spawn.dir === 'south') for (let z = 0;    z <= NEAR_LOW;  z++) points.push({ x: HOUSE_CENTER.x, z });
+  if (spawn.dir === 'north') for (let z = LAST; z >= NEAR_HIGH; z--) points.push({ x: HOUSE_CENTER.x, z });
+  if (spawn.dir === 'east')  for (let x = 0;    x <= NEAR_LOW;  x++) points.push({ x, z: HOUSE_CENTER.z });
+  if (spawn.dir === 'west')  for (let x = LAST; x >= NEAR_HIGH; x--) points.push({ x, z: HOUSE_CENTER.z });
   points.push({ x: HOUSE_CENTER.x, z: HOUSE_CENTER.z });
   return points;
 }
 
 export function pathTilesForDir(dir) {
   const out = [];
-  if (dir === 'south') for (let z = 0; z <= 3; z++) out.push({ x: 5, z });
-  if (dir === 'north') for (let z = 10; z >= 7; z--) out.push({ x: 5, z });
-  if (dir === 'east')  for (let x = 0; x <= 3; x++) out.push({ x, z: 5 });
-  if (dir === 'west')  for (let x = 10; x >= 7; x--) out.push({ x, z: 5 });
+  if (dir === 'south') for (let z = 0;    z <= NEAR_LOW;  z++) out.push({ x: HOUSE_CENTER.x, z });
+  if (dir === 'north') for (let z = LAST; z >= NEAR_HIGH; z--) out.push({ x: HOUSE_CENTER.x, z });
+  if (dir === 'east')  for (let x = 0;    x <= NEAR_LOW;  x++) out.push({ x, z: HOUSE_CENTER.z });
+  if (dir === 'west')  for (let x = LAST; x >= NEAR_HIGH; x--) out.push({ x, z: HOUSE_CENTER.z });
   return out;
 }

@@ -416,22 +416,55 @@ function syncShots() {
 }
 
 const playerGroup = new THREE.Group();
-const playerBodyMat = new THREE.MeshStandardMaterial({ color: 0x2266ff, metalness: 0.2, roughness: 0.6 });
-const playerHeadMat = new THREE.MeshStandardMaterial({ color: 0xffd54f, roughness: 0.5 });
-const playerBody = new THREE.Mesh(new THREE.CapsuleGeometry(0.25, 0.6, 4, 8), playerBodyMat);
-playerBody.position.y = 0.55;
-const playerHead = new THREE.Mesh(new THREE.SphereGeometry(0.22, 16, 12), playerHeadMat);
-playerHead.position.y = 1.05;
-playerGroup.add(playerBody);
-playerGroup.add(playerHead);
+const skinMat   = new THREE.MeshStandardMaterial({ color: 0xf5c799, roughness: 0.6 });
+const shirtMat  = new THREE.MeshStandardMaterial({ color: 0x2266ff, roughness: 0.7 });
+const pantsMat  = new THREE.MeshStandardMaterial({ color: 0x1a1a3a, roughness: 0.7 });
+const hairMat   = new THREE.MeshStandardMaterial({ color: 0x3d2410, roughness: 0.85 });
+const eyeMat    = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.4 });
+const shoeMat   = new THREE.MeshStandardMaterial({ color: 0x1a1209, roughness: 0.8 });
 
-const gunMat = new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.85, roughness: 0.3 });
+const head = new THREE.Mesh(new THREE.SphereGeometry(0.16, 18, 14), skinMat);
+head.position.y = 1.25;
+const hair = new THREE.Mesh(
+  new THREE.SphereGeometry(0.17, 18, 14, 0, Math.PI * 2, 0, Math.PI / 2.3),
+  hairMat,
+);
+hair.position.y = 1.27;
+const eye1 = new THREE.Mesh(new THREE.SphereGeometry(0.022, 8, 6), eyeMat);
+eye1.position.set(-0.055, 1.27, 0.14);
+const eye2 = new THREE.Mesh(new THREE.SphereGeometry(0.022, 8, 6), eyeMat);
+eye2.position.set( 0.055, 1.27, 0.14);
+const torso = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.45, 0.18), shirtMat);
+torso.position.y = 0.88;
+const armGeo = new THREE.CylinderGeometry(0.05, 0.05, 0.4, 12);
+const lArm = new THREE.Mesh(armGeo, shirtMat);
+lArm.position.set(-0.22, 0.9, 0);
+const rArm = new THREE.Mesh(armGeo, shirtMat);
+rArm.position.set( 0.22, 0.9, 0);
+const handGeo = new THREE.SphereGeometry(0.055, 12, 10);
+const lHand = new THREE.Mesh(handGeo, skinMat);
+lHand.position.set(-0.22, 0.66, 0);
+const rHand = new THREE.Mesh(handGeo, skinMat);
+rHand.position.set( 0.22, 0.66, 0);
+const legGeo = new THREE.CylinderGeometry(0.075, 0.075, 0.48, 12);
+const lLeg = new THREE.Mesh(legGeo, pantsMat);
+lLeg.position.set(-0.09, 0.42, 0);
+const rLeg = new THREE.Mesh(legGeo, pantsMat);
+rLeg.position.set( 0.09, 0.42, 0);
+const footGeo = new THREE.BoxGeometry(0.11, 0.07, 0.18);
+const lFoot = new THREE.Mesh(footGeo, shoeMat);
+lFoot.position.set(-0.09, 0.16, 0.03);
+const rFoot = new THREE.Mesh(footGeo, shoeMat);
+rFoot.position.set( 0.09, 0.16, 0.03);
+playerGroup.add(head, hair, eye1, eye2, torso, lArm, rArm, lHand, rHand, lLeg, rLeg, lFoot, rFoot);
+
+const gunMat  = new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.85, roughness: 0.3 });
 const gunGrip = new THREE.MeshStandardMaterial({ color: 0x553311, metalness: 0.2, roughness: 0.8 });
 const gunGroup = new THREE.Group();
 const gunBarrel = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, 0.34), gunMat);
-gunBarrel.position.set(0.28, 0.65, 0.14);
-const gunHandle = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.14, 0.07), gunGrip);
-gunHandle.position.set(0.28, 0.55, 0.0);
+gunBarrel.position.set(0.22, 0.7, 0.18);
+const gunHandle = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.12, 0.07), gunGrip);
+gunHandle.position.set(0.22, 0.6, 0.06);
 gunGroup.add(gunBarrel, gunHandle);
 gunGroup.visible = false;
 playerGroup.add(gunGroup);
@@ -562,11 +595,20 @@ function readMoveInput() {
   return { dx, dz };
 }
 
+let lastPlayerX = playerGroup.position.x;
+let lastPlayerZ = playerGroup.position.z;
 function syncPlayer() {
   const p = game.player;
+  const dx = p.pos.x - lastPlayerX;
+  const dz = p.pos.z - lastPlayerZ;
+  if (dx * dx + dz * dz > 0.00002) {
+    playerGroup.rotation.y = Math.atan2(dx, dz);
+  }
+  lastPlayerX = p.pos.x;
+  lastPlayerZ = p.pos.z;
   playerGroup.position.set(p.pos.x, p.y, p.pos.z);
   const flash = p.hitCooldown > 0;
-  playerBodyMat.color.set(flash ? 0xff3322 : 0x2266ff);
+  shirtMat.color.set(flash ? 0xff3322 : 0x2266ff);
   const op = p.sheltered ? 0.3 : 1.0;
   houseMat.opacity = op;
   roofMat.opacity = op;
