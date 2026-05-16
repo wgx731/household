@@ -2,23 +2,25 @@ import { ENEMIES } from './config.js';
 
 let nextId = 1;
 
-export function createEnemy(type, path) {
+export function createEnemy(type, path, mod = { hp: 1, speed: 1 }) {
   const cfg = ENEMIES[type];
   if (!cfg) throw new Error(`unknown enemy ${type}`);
   const start = path[0];
+  const hp = Math.round(cfg.hp * mod.hp);
   return {
     id: nextId++,
     type,
     kind: cfg.kind,
-    hp: cfg.hp,
-    maxHp: cfg.hp,
-    speed: cfg.speed,
+    hp,
+    maxHp: hp,
+    speed: cfg.speed * mod.speed,
     reward: cfg.reward,
     pos: { x: start.x, z: start.z },
     path,
     pathIdx: 0,
     reachedHouse: false,
     dead: false,
+    shootCooldown: 0,
   };
 }
 

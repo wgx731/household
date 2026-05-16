@@ -46,3 +46,12 @@ export function pathFromSpawn(spawn) {
   points.push({ x: HOUSE_CENTER.x, z: HOUSE_CENTER.z });
   return points;
 }
+
+export function pathTilesForDir(dir) {
+  const out = [];
+  if (dir === 'south') for (let z = 0; z <= 3; z++) out.push({ x: 5, z });
+  if (dir === 'north') for (let z = 10; z >= 7; z--) out.push({ x: 5, z });
+  if (dir === 'east')  for (let x = 0; x <= 3; x++) out.push({ x, z: 5 });
+  if (dir === 'west')  for (let x = 10; x >= 7; x--) out.push({ x, z: 5 });
+  return out;
+}
