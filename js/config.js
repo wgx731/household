@@ -52,3 +52,8 @@ export const DIFFICULTIES = {
   normal: { hp: 1.0, speed: 1.0, label: 'Normal' },
   hard:   { hp: 1.4, speed: 1.3, label: 'Hard' },
 };
+
+export const POTION_DROP_CHANCE = 0.35;
+export const POTION_HEAL = 20;
+export const POTION_PICKUP_RADIUS = 0.55;
+export const POTION_MAX_ON_MAP = 5;

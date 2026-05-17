@@ -232,6 +232,42 @@ export function sfxVolcano() {
   noise.start(t);
 }
 
+export function sfxHeal() {
+  if (!ctx) return;
+  const t = ctx.currentTime;
+  const notes = [[523.25, 0], [659.25, 0.06], [783.99, 0.12]];
+  for (const [freq, off] of notes) {
+    const osc = ctx.createOscillator();
+    const env = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    env.gain.setValueAtTime(0, t + off);
+    env.gain.linearRampToValueAtTime(0.2, t + off + 0.005);
+    env.gain.exponentialRampToValueAtTime(0.001, t + off + 0.28);
+    osc.connect(env);
+    env.connect(master);
+    osc.start(t + off);
+    osc.stop(t + off + 0.3);
+  }
+}
+
+export function sfxHurt() {
+  if (!ctx) return;
+  const t = ctx.currentTime;
+  const osc = ctx.createOscillator();
+  const env = ctx.createGain();
+  osc.type = 'sawtooth';
+  osc.frequency.setValueAtTime(260, t);
+  osc.frequency.exponentialRampToValueAtTime(70, t + 0.22);
+  env.gain.setValueAtTime(0, t);
+  env.gain.linearRampToValueAtTime(0.28, t + 0.005);
+  env.gain.exponentialRampToValueAtTime(0.001, t + 0.28);
+  osc.connect(env);
+  env.connect(master);
+  osc.start(t);
+  osc.stop(t + 0.3);
+}
+
 export function sfxArrow() {
   if (!ctx) return;
   const t = ctx.currentTime;

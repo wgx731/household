@@ -33,6 +33,8 @@ export function pathTiles() {
 const LAST = GRID_SIZE - 1;
 const NEAR_LOW = HOUSE_CENTER.x - 2;
 const NEAR_HIGH = HOUSE_CENTER.x + 2;
+const TOUCH_LOW = HOUSE_CENTER.x - 1;
+const TOUCH_HIGH = HOUSE_CENTER.x + 1;
 
 export const SPAWN_POINTS = [
   { x: HOUSE_CENTER.x, z: 0,    dir: 'south' },
@@ -43,11 +45,10 @@ export const SPAWN_POINTS = [
 
 export function pathFromSpawn(spawn) {
   const points = [];
-  if (spawn.dir === 'south') for (let z = 0;    z <= NEAR_LOW;  z++) points.push({ x: HOUSE_CENTER.x, z });
-  if (spawn.dir === 'north') for (let z = LAST; z >= NEAR_HIGH; z--) points.push({ x: HOUSE_CENTER.x, z });
-  if (spawn.dir === 'east')  for (let x = 0;    x <= NEAR_LOW;  x++) points.push({ x, z: HOUSE_CENTER.z });
-  if (spawn.dir === 'west')  for (let x = LAST; x >= NEAR_HIGH; x--) points.push({ x, z: HOUSE_CENTER.z });
-  points.push({ x: HOUSE_CENTER.x, z: HOUSE_CENTER.z });
+  if (spawn.dir === 'south') for (let z = 0;    z <= TOUCH_LOW;  z++) points.push({ x: HOUSE_CENTER.x, z });
+  if (spawn.dir === 'north') for (let z = LAST; z >= TOUCH_HIGH; z--) points.push({ x: HOUSE_CENTER.x, z });
+  if (spawn.dir === 'east')  for (let x = 0;    x <= TOUCH_LOW;  x++) points.push({ x, z: HOUSE_CENTER.z });
+  if (spawn.dir === 'west')  for (let x = LAST; x >= TOUCH_HIGH; x--) points.push({ x, z: HOUSE_CENTER.z });
   return points;
 }
 

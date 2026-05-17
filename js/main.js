@@ -1,11 +1,11 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
-import { GRID_SIZE, TILE_SIZE, HOUSE_CENTER, EXPLOSION_TTL_MS } from './config.js';
+import { GRID_SIZE, TILE_SIZE, HOUSE_CENTER, EXPLOSION_TTL_MS, TOWERS } from './config.js';
 import { tileType, SPAWN_POINTS, pathTilesForDir } from './map.js';
 import { createGame } from './game.js';
 import { createUi } from './ui.js';
-import { sfxCannon, sfxTurret, sfxTrap, sfxGun, sfxBomb, sfxArrow, sfxEarthquake, sfxFlood, sfxVolcano } from './audio.js';
+import { sfxCannon, sfxTurret, sfxTrap, sfxGun, sfxBomb, sfxArrow, sfxEarthquake, sfxFlood, sfxVolcano, sfxHeal } from './audio.js';
 
 const loader = new GLTFLoader();
 const [zombieGltf, alienGltf] = await Promise.all([
@@ -14,6 +14,12 @@ const [zombieGltf, alienGltf] = await Promise.all([
 ]);
 const zombieTemplate = zombieGltf.scene;
 const alienTemplate = alienGltf.scene;
+const zombieClips = zombieGltf.animations || [];
+const alienClips  = alienGltf.animations  || [];
+const pickWalkClip = (clips) =>
+  clips.find(c => /walk|run|move/i.test(c.name)) || clips[0];
+const zombieWalkClip = pickWalkClip(zombieClips);
+const alienWalkClip  = pickWalkClip(alienClips);
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x87ceeb);
@@ -67,6 +73,10 @@ addEventListener('resize', applyViewport);
 addEventListener('orientationchange', applyViewport);
 
 const game = createGame();
+try {
+  const saved = JSON.parse(localStorage.getItem('household_achievements') || '[]');
+  for (const a of saved) game.achievements.add(a);
+} catch (_) {}
 const ui = createUi(game);
 
 const enemyMeshes = new Map();
@@ -120,12 +130,19 @@ function makeBomber() {
   const body = new THREE.Mesh(new THREE.DodecahedronGeometry(0.3, 0), bomberBodyMat);
   body.position.y = 0.35;
   g.add(body);
+  const legs = [];
   for (let i = 0; i < 4; i++) {
     const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+    const pivot = new THREE.Group();
+    pivot.position.set(Math.cos(a) * 0.18, 0.22, Math.sin(a) * 0.18);
     const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.22, 8), bomberLegMat);
-    leg.position.set(Math.cos(a) * 0.18, 0.11, Math.sin(a) * 0.18);
-    g.add(leg);
+    leg.position.y = -0.11;
+    pivot.add(leg);
+    pivot.userData.phase = i * Math.PI / 2;
+    g.add(pivot);
+    legs.push(pivot);
   }
+  g.userData.bomberLegs = legs;
   const eye1 = new THREE.Mesh(new THREE.SphereGeometry(0.05, 10, 8), bomberEyeMat);
   eye1.position.set(-0.1, 0.4, 0.25);
   const eye2 = new THREE.Mesh(new THREE.SphereGeometry(0.05, 10, 8), bomberEyeMat);
@@ -161,24 +178,86 @@ function makeArcher() {
   return g;
 }
 
+function attachClip(m, clip) {
+  if (!clip) return;
+  const mixer = new THREE.AnimationMixer(m);
+  mixer.clipAction(clip).play();
+  m.userData.mixer = mixer;
+}
+
+const alienCoreMat = new THREE.MeshStandardMaterial({
+  color: 0x88ff44, emissive: 0x55cc22, emissiveIntensity: 0.85, roughness: 0.35, metalness: 0.3,
+});
+const alienDomeMat = new THREE.MeshStandardMaterial({
+  color: 0xaaffaa, emissive: 0x66ff88, emissiveIntensity: 0.55,
+  transparent: true, opacity: 0.55, roughness: 0.2, metalness: 0.4,
+});
+const alienTentMat = new THREE.MeshStandardMaterial({
+  color: 0x55cc33, emissive: 0x224411, emissiveIntensity: 0.35, roughness: 0.5,
+});
+const alienEyeMat = new THREE.MeshStandardMaterial({
+  color: 0xff2244, emissive: 0xff0033, emissiveIntensity: 1.4, roughness: 0.2,
+});
+const alienAuraMat = new THREE.MeshBasicMaterial({
+  color: 0x66ff88, transparent: true, opacity: 0.18, depthWrite: false,
+});
+
+function makeAlien() {
+  const g = new THREE.Group();
+  const aura = new THREE.Mesh(new THREE.SphereGeometry(0.45, 18, 14), alienAuraMat);
+  g.add(aura);
+  const core = new THREE.Mesh(new THREE.SphereGeometry(0.22, 22, 16), alienCoreMat);
+  g.add(core);
+  const dome = new THREE.Mesh(
+    new THREE.SphereGeometry(0.3, 22, 14, 0, Math.PI * 2, 0, Math.PI / 2),
+    alienDomeMat,
+  );
+  dome.position.y = 0.05;
+  g.add(dome);
+  const eye1 = new THREE.Mesh(new THREE.SphereGeometry(0.05, 12, 10), alienEyeMat);
+  eye1.position.set(-0.1, 0.05, 0.22);
+  const eye2 = new THREE.Mesh(new THREE.SphereGeometry(0.05, 12, 10), alienEyeMat);
+  eye2.position.set( 0.1, 0.05, 0.22);
+  g.add(eye1, eye2);
+  const tentGeo = new THREE.CylinderGeometry(0.035, 0.012, 0.32, 10);
+  const tentacles = [];
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+    const pivot = new THREE.Group();
+    pivot.position.set(Math.cos(a) * 0.15, -0.04, Math.sin(a) * 0.15);
+    const t = new THREE.Mesh(tentGeo, alienTentMat);
+    t.position.y = -0.16;
+    pivot.add(t);
+    pivot.userData.phase = i * Math.PI / 2;
+    g.add(pivot);
+    tentacles.push(pivot);
+  }
+  const halo = new THREE.PointLight(0x66ff66, 0.7, 3.5);
+  halo.position.y = 0;
+  g.add(halo);
+  g.userData.alienTentacles = tentacles;
+  return g;
+}
+
 function meshFor(e) {
   if (e.type === 'zombie') {
     const m = SkeletonUtils.clone(zombieTemplate);
     m.scale.setScalar(0.5);
+    attachClip(m, zombieWalkClip);
     return m;
   }
   if (e.type === 'alien') {
-    const m = SkeletonUtils.clone(alienTemplate);
-    m.scale.setScalar(0.3);
-    return m;
+    return makeAlien();
   }
   if (e.type === 'bomber') return makeBomber();
   if (e.type === 'archer') return makeArcher();
   return createMothership();
 }
 
-function syncEnemies() {
+function syncEnemies(dtMs) {
   const seen = new Set();
+  const tNow = performance.now();
+  const dts = (dtMs || 16) / 1000;
   for (const e of game.activeEnemies) {
     seen.add(e.id);
     let m = enemyMeshes.get(e.id);
@@ -192,6 +271,21 @@ function syncEnemies() {
       if (next.x !== e.pos.x || next.z !== e.pos.z) {
         m.lookAt(next.x, y, next.z);
       }
+    }
+    if (m.userData.mixer) m.userData.mixer.update(dts);
+    if (m.userData.bomberLegs) {
+      const w = tNow / 100;
+      for (const leg of m.userData.bomberLegs) {
+        leg.rotation.x = Math.sin(w + leg.userData.phase) * 0.45;
+      }
+    }
+    if (m.userData.alienTentacles) {
+      const w = tNow / 220;
+      for (const t of m.userData.alienTentacles) {
+        t.rotation.x = Math.sin(w + t.userData.phase) * 0.5;
+        t.rotation.z = Math.cos(w + t.userData.phase) * 0.4;
+      }
+      m.position.y += Math.sin(tNow / 350) * 0.08;
     }
     if (m.userData.isMothership) m.rotation.y += 0.01;
   }
@@ -228,18 +322,22 @@ function makeCannon() {
   const carriage = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.18, 0.38), cannonWoodMat);
   carriage.position.y = 0.08;
   g.add(carriage);
+
+  const aim = new THREE.Group();
   const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 0.6, 18), cannonBodyMat);
   barrel.position.set(0, 0.22, 0.08);
   barrel.rotation.x = Math.PI / 2 - 0.18;
-  g.add(barrel);
+  aim.add(barrel);
   const band1 = new THREE.Mesh(new THREE.TorusGeometry(0.085, 0.02, 8, 18), cannonRimMat);
   band1.position.set(0, 0.17, -0.1); band1.rotation.x = Math.PI / 2 - 0.18;
   const band2 = new THREE.Mesh(new THREE.TorusGeometry(0.085, 0.02, 8, 18), cannonRimMat);
   band2.position.set(0, 0.30, 0.25); band2.rotation.x = Math.PI / 2 - 0.18;
-  g.add(band1, band2);
+  aim.add(band1, band2);
   const muzzle = new THREE.Mesh(new THREE.TorusGeometry(0.095, 0.028, 8, 18), cannonRimMat);
   muzzle.position.set(0, 0.38, 0.41); muzzle.rotation.x = Math.PI / 2 - 0.18;
-  g.add(muzzle);
+  aim.add(muzzle);
+  g.add(aim);
+  g.userData.aim = aim;
   return g;
 }
 
@@ -248,23 +346,27 @@ function makeTurret() {
   const base = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.38, 0.16, 20), turretBodyMat);
   base.position.y = -0.22;
   g.add(base);
+
+  const aim = new THREE.Group();
   const pivot = new THREE.Mesh(new THREE.SphereGeometry(0.2, 18, 14), turretBodyMat);
   pivot.position.y = 0.0;
-  g.add(pivot);
+  aim.add(pivot);
   const bGeo = new THREE.CylinderGeometry(0.05, 0.05, 0.7, 14);
   const b1 = new THREE.Mesh(bGeo, turretBarrelMat);
   b1.position.set(-0.08, 0.28, 0.05); b1.rotation.x = -0.35;
   const b2 = new THREE.Mesh(bGeo, turretBarrelMat);
   b2.position.set( 0.08, 0.28, 0.05); b2.rotation.x = -0.35;
-  g.add(b1, b2);
+  aim.add(b1, b2);
   const m1 = new THREE.Mesh(new THREE.TorusGeometry(0.058, 0.018, 8, 14), cannonRimMat);
   m1.position.set(-0.08, 0.55, 0.14); m1.rotation.x = Math.PI / 2 - 0.35;
   const m2 = new THREE.Mesh(new THREE.TorusGeometry(0.058, 0.018, 8, 14), cannonRimMat);
   m2.position.set( 0.08, 0.55, 0.14); m2.rotation.x = Math.PI / 2 - 0.35;
-  g.add(m1, m2);
+  aim.add(m1, m2);
   const light = new THREE.Mesh(new THREE.SphereGeometry(0.045, 8, 8), turretLightMat);
   light.position.set(0, 0.1, 0.2);
-  g.add(light);
+  aim.add(light);
+  g.add(aim);
+  g.userData.aim = aim;
   return g;
 }
 
@@ -300,6 +402,23 @@ function syncTowers() {
     if (!m) { m = towerMeshFor(t); scene.add(m); towerMeshes.set(t.id, m); }
     m.position.set(t.pos.x, t.type === 'trap' ? 0.06 : 0.3, t.pos.z);
     m.visible = !t.destroyed;
+    if (m.userData.aim && !t.destroyed) {
+      const cfg = TOWERS[t.type];
+      const r = cfg.range + ((t.level || 1) - 1);
+      let nearest = null, bestD = r * r;
+      for (const e of game.activeEnemies) {
+        if (e.dead) continue;
+        if (cfg.targets === 'air' && e.kind !== 'air') continue;
+        if (cfg.targets === 'ground' && e.kind !== 'ground') continue;
+        const dx = e.pos.x - t.pos.x;
+        const dz = e.pos.z - t.pos.z;
+        const d2 = dx * dx + dz * dz;
+        if (d2 <= bestD) { bestD = d2; nearest = e; }
+      }
+      if (nearest) {
+        m.userData.aim.rotation.y = Math.atan2(nearest.pos.x - t.pos.x, nearest.pos.z - t.pos.z);
+      }
+    }
   }
 }
 
@@ -436,27 +555,38 @@ const eye2 = new THREE.Mesh(new THREE.SphereGeometry(0.022, 8, 6), eyeMat);
 eye2.position.set( 0.055, 1.27, 0.14);
 const torso = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.45, 0.18), shirtMat);
 torso.position.y = 0.88;
+playerGroup.add(head, hair, eye1, eye2, torso);
+
 const armGeo = new THREE.CylinderGeometry(0.05, 0.05, 0.4, 12);
-const lArm = new THREE.Mesh(armGeo, shirtMat);
-lArm.position.set(-0.22, 0.9, 0);
-const rArm = new THREE.Mesh(armGeo, shirtMat);
-rArm.position.set( 0.22, 0.9, 0);
 const handGeo = new THREE.SphereGeometry(0.055, 12, 10);
-const lHand = new THREE.Mesh(handGeo, skinMat);
-lHand.position.set(-0.22, 0.66, 0);
-const rHand = new THREE.Mesh(handGeo, skinMat);
-rHand.position.set( 0.22, 0.66, 0);
 const legGeo = new THREE.CylinderGeometry(0.075, 0.075, 0.48, 12);
-const lLeg = new THREE.Mesh(legGeo, pantsMat);
-lLeg.position.set(-0.09, 0.42, 0);
-const rLeg = new THREE.Mesh(legGeo, pantsMat);
-rLeg.position.set( 0.09, 0.42, 0);
 const footGeo = new THREE.BoxGeometry(0.11, 0.07, 0.18);
-const lFoot = new THREE.Mesh(footGeo, shoeMat);
-lFoot.position.set(-0.09, 0.16, 0.03);
-const rFoot = new THREE.Mesh(footGeo, shoeMat);
-rFoot.position.set( 0.09, 0.16, 0.03);
-playerGroup.add(head, hair, eye1, eye2, torso, lArm, rArm, lHand, rHand, lLeg, rLeg, lFoot, rFoot);
+
+function makeArm(x) {
+  const pivot = new THREE.Group();
+  pivot.position.set(x, 1.1, 0);
+  const arm = new THREE.Mesh(armGeo, shirtMat);
+  arm.position.y = -0.2;
+  const hand = new THREE.Mesh(handGeo, skinMat);
+  hand.position.y = -0.44;
+  pivot.add(arm, hand);
+  return pivot;
+}
+function makeLeg(x) {
+  const pivot = new THREE.Group();
+  pivot.position.set(x, 0.66, 0);
+  const leg = new THREE.Mesh(legGeo, pantsMat);
+  leg.position.y = -0.24;
+  const foot = new THREE.Mesh(footGeo, shoeMat);
+  foot.position.set(0, -0.5, 0.03);
+  pivot.add(leg, foot);
+  return pivot;
+}
+const lArmPivot = makeArm(-0.22);
+const rArmPivot = makeArm( 0.22);
+const lLegPivot = makeLeg(-0.09);
+const rLegPivot = makeLeg( 0.09);
+playerGroup.add(lArmPivot, rArmPivot, lLegPivot, rLegPivot);
 
 const gunMat  = new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.85, roughness: 0.3 });
 const gunGrip = new THREE.MeshStandardMaterial({ color: 0x553311, metalness: 0.2, roughness: 0.8 });
@@ -494,6 +624,106 @@ function syncBombs() {
   }
   for (const [b, m] of bombMeshes) {
     if (!seen.has(b)) { scene.remove(m); bombMeshes.delete(b); }
+  }
+}
+
+const damageOverlay = document.createElement('div');
+damageOverlay.style.cssText = `
+  position: fixed; inset: 0; pointer-events: none; z-index: 20;
+  font-family: sans-serif;
+`;
+document.body.appendChild(damageOverlay);
+
+const damageElems = new Map();
+const _projVec = new THREE.Vector3();
+function syncDamageEvents() {
+  const seen = new Set();
+  for (const d of game.damageEvents) {
+    seen.add(d);
+    let el = damageElems.get(d);
+    if (!el) {
+      el = document.createElement('div');
+      el.textContent = `-${d.amount}`;
+      el.style.cssText = `
+        position: absolute; transform: translate(-50%, -50%);
+        color: #ff4d4d; font-weight: 900; font-size: 18px;
+        text-shadow: 1px 1px 2px #000, 0 0 6px rgba(0,0,0,.6);
+        pointer-events: none; white-space: nowrap;
+      `;
+      damageOverlay.appendChild(el);
+      damageElems.set(d, el);
+    }
+    const lifeRatio = Math.max(0, d.ttl / 700);
+    _projVec.set(d.pos.x, 1.6 + (1 - lifeRatio) * 1.4, d.pos.z);
+    _projVec.project(camera);
+    const sx = (_projVec.x + 1) / 2 * innerWidth;
+    const sy = (1 - _projVec.y) / 2 * innerHeight;
+    el.style.left = sx + 'px';
+    el.style.top = sy + 'px';
+    el.style.opacity = String(lifeRatio);
+  }
+  for (const [d, el] of damageElems) {
+    if (!seen.has(d)) { el.remove(); damageElems.delete(d); }
+  }
+}
+
+const laserGroup = new THREE.Group();
+scene.add(laserGroup);
+const laserMat = new THREE.LineBasicMaterial({ color: 0xff2244 });
+function syncLasers() {
+  while (laserGroup.children.length) laserGroup.remove(laserGroup.children[0]);
+  for (const l of game.motherLasers) {
+    const g = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(l.from.x, 1.8, l.from.z),
+      new THREE.Vector3(l.to.x, 0.6, l.to.z),
+    ]);
+    laserGroup.add(new THREE.Line(g, laserMat));
+  }
+}
+
+const potionLiquidMat = new THREE.MeshStandardMaterial({ color: 0xff3377, emissive: 0xaa1144, emissiveIntensity: 0.7, roughness: 0.4 });
+const potionGlassMat  = new THREE.MeshStandardMaterial({ color: 0xeeeeee, transparent: true, opacity: 0.55, roughness: 0.2 });
+const potionCorkMat   = new THREE.MeshStandardMaterial({ color: 0x553311, roughness: 0.8 });
+const potionGlowMat   = new THREE.MeshBasicMaterial({ color: 0xff6699, transparent: true, opacity: 0.25, depthWrite: false });
+
+function makePotion() {
+  const g = new THREE.Group();
+  const bottle = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.13, 0.22, 16), potionLiquidMat);
+  bottle.position.y = 0.3;
+  g.add(bottle);
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.08, 12), potionGlassMat);
+  neck.position.y = 0.45;
+  g.add(neck);
+  const cork = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.05, 12), potionCorkMat);
+  cork.position.y = 0.52;
+  g.add(cork);
+  const glow = new THREE.Mesh(new THREE.SphereGeometry(0.22, 16, 12), potionGlowMat);
+  glow.position.y = 0.32;
+  g.add(glow);
+  return g;
+}
+
+const potionMeshes = new Map();
+let lastPotionCount = 0;
+function syncPotions() {
+  const seen = new Set();
+  for (const p of game.potions) {
+    seen.add(p);
+    let m = potionMeshes.get(p);
+    if (!m) {
+      m = makePotion();
+      scene.add(m);
+      potionMeshes.set(p, m);
+    }
+    m.position.x = p.pos.x;
+    m.position.z = p.pos.z;
+    m.position.y = 0.15 + Math.sin(performance.now() / 350) * 0.08;
+    m.rotation.y += 0.025;
+  }
+  if (game.potions.length < lastPotionCount) sfxHeal();
+  lastPotionCount = game.potions.length;
+  for (const [p, m] of potionMeshes) {
+    if (!seen.has(p)) { scene.remove(m); potionMeshes.delete(p); }
   }
 }
 
@@ -601,8 +831,19 @@ function syncPlayer() {
   const p = game.player;
   const dx = p.pos.x - lastPlayerX;
   const dz = p.pos.z - lastPlayerZ;
-  if (dx * dx + dz * dz > 0.00002) {
+  const moving = dx * dx + dz * dz > 0.00002;
+  if (moving) {
     playerGroup.rotation.y = Math.atan2(dx, dz);
+  }
+  if (moving) {
+    const a = Math.sin(performance.now() / 110) * 0.55;
+    lLegPivot.rotation.x = a;
+    rLegPivot.rotation.x = -a;
+    lArmPivot.rotation.x = -a * 0.6;
+    rArmPivot.rotation.x = a * 0.6;
+  } else {
+    lLegPivot.rotation.x = rLegPivot.rotation.x = 0;
+    lArmPivot.rotation.x = rArmPivot.rotation.x = 0;
   }
   lastPlayerX = p.pos.x;
   lastPlayerZ = p.pos.z;
@@ -629,14 +870,17 @@ function loop(now = performance.now()) {
   last = now;
   const { dx, dz } = readMoveInput();
   if (dx || dz) game.movePlayer(dx, dz, dt);
-  game.tick(dt);
-  syncEnemies();
+  if (!game.paused) game.tick(dt * game.speed);
+  syncEnemies(dt);
   syncTowers();
   syncShots();
   syncDisasters(dt);
   syncPlayer();
   syncBombs();
   syncExplosions();
+  syncPotions();
+  syncLasers();
+  syncDamageEvents();
   renderer.render(scene, camera);
   ui.refresh();
 }

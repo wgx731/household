@@ -1,5 +1,6 @@
 import {
   HOUSE_MAX_HP, START_COINS, MAX_WAVES, TOWERS, WAVE_BREAK_MS, DISASTER_DURATION_MS, VOLCANO_DURATION_MS, DISASTER_WARNING_MS, ENEMIES, DIFFICULTIES, HOUSE_CENTER,
+  POTION_DROP_CHANCE, POTION_HEAL, POTION_PICKUP_RADIUS, POTION_MAX_ON_MAP,
   PLAYER_HP, PLAYER_SPEED, PLAYER_START, PLAYER_HIT_DAMAGE, PLAYER_HIT_COOLDOWN_MS, PLAYER_HIT_RADIUS,
   PLAYER_JUMP_VELOCITY, PLAYER_GRAVITY,
   GUN_COST, GUN_RANGE, GUN_DAMAGE, GUN_COOLDOWN_MS,
@@ -10,7 +11,7 @@ import { tileType, SPAWN_POINTS, pathFromSpawn, pathTilesForDir } from './map.js
 import { generateWave } from './waves.js';
 import { createEconomy } from './economy.js';
 import { createEnemy, stepEnemy, damageEnemy } from './enemies.js';
-import { createTower, tickTower, trapsHittingEnemies } from './towers.js';
+import { createTower, tickTower, trapsHittingEnemies, towerUpgradeCost } from './towers.js';
 import { applyEarthquake, applyFlood, endFlood, applyVolcano, endVolcano, pickRandomDisaster } from './disasters.js';
 
 export function createGame() {
@@ -34,11 +35,26 @@ export function createGame() {
     explosions: [],
     pendingDisaster: null,
     pendingDisasterTimer: 0,
+    potions: [],
     difficulty: 'normal',
+    paused: false,
+    speed: 1,
+    damageEvents: [],
+    motherLasers: [],
+    nextWaveInfo: null,
+    achievements: new Set(),
+    builtTypes: new Set(),
     lostBy: null,
 
     setDifficulty(name) {
       if (DIFFICULTIES[name]) this.difficulty = name;
+    },
+    togglePause() { this.paused = !this.paused; },
+    cycleSpeed() { this.speed = this.speed === 1 ? 2 : this.speed === 2 ? 4 : 1; },
+    _unlock(id) {
+      if (this.achievements.has(id)) return;
+      this.achievements.add(id);
+      try { localStorage.setItem('household_achievements', JSON.stringify([...this.achievements])); } catch (_) {}
     },
 
     placeTower(type, { x, z }) {
@@ -57,7 +73,20 @@ export function createGame() {
     placeTowerAtPlayer(type) {
       const x = Math.round(this.player.pos.x);
       const z = Math.round(this.player.pos.z);
-      return this.placeTower(type, { x, z });
+      const existing = this.towers.find(t => !t.destroyed && t.pos.x === x && t.pos.z === z);
+      if (existing && existing.type === type && type !== 'trap') {
+        const cost = towerUpgradeCost(existing);
+        if (!isFinite(cost)) return false;
+        if (!this.economy.spend(cost)) return false;
+        existing.level++;
+        return true;
+      }
+      const ok = this.placeTower(type, { x, z });
+      if (ok) {
+        this.builtTypes.add(type);
+        if (this.builtTypes.size === 3) this._unlock('architect');
+      }
+      return ok;
     },
 
     movePlayer(dx, dz, dtMs) {
@@ -87,6 +116,7 @@ export function createGame() {
     startNextWave() {
       if (this.wave >= MAX_WAVES) return;
       this.wave++;
+      if (this.wave >= MAX_WAVES) this._unlock('survivor');
       this.state = 'wave';
       const w = generateWave(this.wave);
       const spawns = SPAWN_POINTS.filter(s => !this.blockedDirs.has(s.dir));
@@ -120,6 +150,20 @@ export function createGame() {
 
       this.player.sheltered = tileType(Math.round(this.player.pos.x), Math.round(this.player.pos.z)) === 'house';
       this.player.hitCooldown = Math.max(0, this.player.hitCooldown - dtMs);
+
+      if (this.player.hp < PLAYER_HP) {
+        for (let i = this.potions.length - 1; i >= 0; i--) {
+          const p = this.potions[i];
+          const dx = p.pos.x - this.player.pos.x;
+          const dz = p.pos.z - this.player.pos.z;
+          if (dx * dx + dz * dz <= POTION_PICKUP_RADIUS * POTION_PICKUP_RADIUS) {
+            this.player.hp = Math.min(PLAYER_HP, this.player.hp + POTION_HEAL);
+            this.potions.splice(i, 1);
+            break;
+          }
+        }
+      }
+
       if (this.player.hitCooldown === 0 && !this.player.sheltered && !this.player.airborne) {
         for (const e of this.activeEnemies) {
           const dx = e.pos.x - this.player.pos.x;
@@ -165,6 +209,7 @@ export function createGame() {
             const target = this.activeEnemies.find(e => e.id === s.targetId);
             if (target) {
               damageEnemy(target, s.damage);
+              this.damageEvents.push({ pos: { x: target.pos.x, z: target.pos.z }, amount: Math.round(s.damage), ttl: 700 });
               this.recentShots.push({ from: { x: t.pos.x, z: t.pos.z }, to: { x: target.pos.x, z: target.pos.z }, ttl: 80, type: t.type });
             }
           }
@@ -172,7 +217,10 @@ export function createGame() {
         const traps = this.towers.filter(t => t.type === 'trap');
         for (const hit of trapsHittingEnemies(traps, this.activeEnemies)) {
           const target = this.activeEnemies.find(e => e.id === hit.targetId);
-          if (target) { damageEnemy(target, hit.damage); }
+          if (target) {
+            damageEnemy(target, hit.damage);
+            this.damageEvents.push({ pos: { x: target.pos.x, z: target.pos.z }, amount: Math.round(hit.damage), ttl: 700 });
+          }
           const trap = traps.find(t => t.id === hit.trapId);
           if (trap) {
             trap.destroyed = true;
@@ -209,7 +257,10 @@ export function createGame() {
           if (trig) {
             for (const e2 of this.activeEnemies) {
               const dx = e2.pos.x - e.pos.x, dz = e2.pos.z - e.pos.z;
-              if (dx * dx + dz * dz <= R2) damageEnemy(e2, cfg.explodeDamage);
+              if (dx * dx + dz * dz <= R2) {
+              damageEnemy(e2, cfg.explodeDamage);
+              this.damageEvents.push({ pos: { x: e2.pos.x, z: e2.pos.z }, amount: Math.round(cfg.explodeDamage), ttl: 700 });
+            }
             }
             if (dpx * dpx + dpz * dpz <= R2 && this.player.hitCooldown === 0 && !this.player.sheltered) {
               this.player.hp -= cfg.explodeDamage;
@@ -224,6 +275,20 @@ export function createGame() {
             if (dxh2 * dxh2 + dzh2 * dzh2 <= 2 * 2) this.houseHp -= cfg.explodeDamage;
             this.explosions.push({ pos: { x: e.pos.x, z: e.pos.z }, ttl: EXPLOSION_TTL_MS, source: 'bomber' });
             e.dead = true;
+          }
+        }
+
+        for (const e of this.activeEnemies) {
+          if (e.type !== 'mothership' || e.dead) continue;
+          e.shootCooldown = Math.max(0, e.shootCooldown - dtMs);
+          if (e.shootCooldown === 0) {
+            this.houseHp -= 10;
+            this.motherLasers.push({
+              from: { x: e.pos.x, z: e.pos.z },
+              to: { x: HOUSE_CENTER.x, z: HOUSE_CENTER.z },
+              ttl: 300,
+            });
+            e.shootCooldown = 3000;
           }
         }
 
@@ -260,6 +325,7 @@ export function createGame() {
             }
             if (near) {
               damageEnemy(near, GUN_DAMAGE);
+              this.damageEvents.push({ pos: { x: near.pos.x, z: near.pos.z }, amount: GUN_DAMAGE, ttl: 700 });
               this.player.gunCooldown = GUN_COOLDOWN_MS;
               this.recentShots.push({
                 from: { x: this.player.pos.x, z: this.player.pos.z },
@@ -272,7 +338,15 @@ export function createGame() {
 
         for (const e of this.activeEnemies) {
           if (e.reachedHouse && !e._counted) { this.houseHp -= 10; e._counted = true; }
-          if (e.dead && !e._rewarded) { this.economy.earn(e.reward); e._rewarded = true; if (e.type === 'mothership') this.bossDefeated = true; }
+          if (e.dead && !e._rewarded) {
+            this.economy.earn(e.reward);
+            e._rewarded = true;
+            this._unlock('firstKill');
+            if (e.type === 'mothership') { this.bossDefeated = true; this._unlock('bossSlayer'); }
+            if (this.potions.length < POTION_MAX_ON_MAP && Math.random() < POTION_DROP_CHANCE) {
+              this.potions.push({ pos: { x: e.pos.x, z: e.pos.z } });
+            }
+          }
         }
         this.activeEnemies = this.activeEnemies.filter(e => !e.dead && !e.reachedHouse);
 
@@ -284,10 +358,11 @@ export function createGame() {
               this.player.gunWavesLeft = 0;
             }
           }
-          if (this.wave === MAX_WAVES && this.bossDefeated) { this.state = 'won'; return; }
-          if (this.wave === MAX_WAVES) { this.state = 'won'; return; }
+          if (this.wave === MAX_WAVES && this.bossDefeated) { this.state = 'won'; this._unlock('win' + this.difficulty[0].toUpperCase() + this.difficulty.slice(1)); return; }
+          if (this.wave === MAX_WAVES) { this.state = 'won'; this._unlock('win' + this.difficulty[0].toUpperCase() + this.difficulty.slice(1)); return; }
           this.state = 'break';
           this.breakTimer = WAVE_BREAK_MS;
+          this.nextWaveInfo = this.wave < MAX_WAVES ? generateWave(this.wave + 1) : null;
           if (Math.random() < 0.6 && !this.pendingDisaster && !this.activeDisaster) {
             this.pendingDisaster = pickRandomDisaster();
             this.pendingDisasterTimer = DISASTER_WARNING_MS;
@@ -314,7 +389,10 @@ export function createGame() {
           for (const e of this.activeEnemies) {
             const dx = e.pos.x - b.pos.x;
             const dz = e.pos.z - b.pos.z;
-            if (dx * dx + dz * dz <= BOMB_RADIUS * BOMB_RADIUS) damageEnemy(e, BOMB_DAMAGE);
+            if (dx * dx + dz * dz <= BOMB_RADIUS * BOMB_RADIUS) {
+              damageEnemy(e, BOMB_DAMAGE);
+              this.damageEvents.push({ pos: { x: e.pos.x, z: e.pos.z }, amount: BOMB_DAMAGE, ttl: 700 });
+            }
           }
           this.explosions.push({ pos: { x: b.pos.x, z: b.pos.z }, ttl: EXPLOSION_TTL_MS, source: 'bomb' });
         }
@@ -325,6 +403,10 @@ export function createGame() {
 
       for (const s of this.recentShots) s.ttl -= dtMs;
       this.recentShots = this.recentShots.filter(s => s.ttl > 0);
+      for (const d of this.damageEvents) d.ttl -= dtMs;
+      this.damageEvents = this.damageEvents.filter(d => d.ttl > 0);
+      for (const l of this.motherLasers) l.ttl -= dtMs;
+      this.motherLasers = this.motherLasers.filter(l => l.ttl > 0);
     },
 
     _beginDisaster(kind = pickRandomDisaster()) {
@@ -348,6 +430,9 @@ export function createGame() {
               t.destroyed = true;
             }
           }
+          this.potions = this.potions.filter(p =>
+            !lava.some(lt => lt.x === Math.round(p.pos.x) && lt.z === Math.round(p.pos.z))
+          );
         }
         this.disasterTimer = VOLCANO_DURATION_MS;
       }

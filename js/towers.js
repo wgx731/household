@@ -10,17 +10,29 @@ export function createTower(type, pos) {
     type,
     pos: { x: pos.x, z: pos.z },
     cfg,
+    level: 1,
     cooldown: 0,
     destroyed: false,
     disabled: false,
   };
 }
 
+export function towerDamage(tower) {
+  return tower.cfg.damage * (1 + (tower.level - 1) * 0.7);
+}
+export function towerRange(tower) {
+  return tower.cfg.range + (tower.level - 1);
+}
+export function towerUpgradeCost(tower) {
+  return tower.level === 1 ? 30 : tower.level === 2 ? 60 : Infinity;
+}
+
 function dist(a, b) { return Math.hypot(a.x - b.x, a.z - b.z); }
 
 export function findTarget(tower, enemies) {
   if (tower.destroyed || tower.disabled) return null;
-  const { range, targets } = tower.cfg;
+  const range = towerRange(tower);
+  const { targets } = tower.cfg;
   for (const e of enemies) {
     if (e.dead || e.reachedHouse) continue;
     if (targets === 'ground' && e.kind !== 'ground') continue;
@@ -38,7 +50,7 @@ export function tickTower(tower, dtMs, enemies) {
   const target = findTarget(tower, enemies);
   if (!target) return [];
   tower.cooldown = tower.cfg.cooldownMs;
-  return [{ towerId: tower.id, targetId: target.id, damage: tower.cfg.damage }];
+  return [{ towerId: tower.id, targetId: target.id, damage: towerDamage(tower) }];
 }
 
 export function trapsHittingEnemies(traps, enemies) {
